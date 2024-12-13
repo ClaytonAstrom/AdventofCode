@@ -1,5 +1,6 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
+use std::io::{self, Write};
 use std::io::{BufReader, BufRead};
 use regex::Regex;
 fn main() {
@@ -12,7 +13,9 @@ fn main() {
     // day_four_star_one();
     // day_four_star_two();
     // day_five_star_one();
-    day_five_star_two();
+    // day_five_star_two();
+    // day_six_star_one();
+    day_six_star_two();
 }
 
 fn day_one_star_one() {
@@ -400,6 +403,201 @@ fn day_five_star_two() {
     }
     println!("{:?}", total);
 
+
+}
+
+fn day_six_star_one() {
+    let file = File::open("day6.txt").ok().unwrap();
+    let reader = BufReader::new(file);
+    let targets = ['^', '>', '<', 'V', 'v'];
+    let mut current_position = None;
+    let mut facing = None;
+    let mut unique_visited: HashSet<(usize, usize)> = HashSet::new();
+    let mut x_delta: i32 = 0;
+    let mut y_delta: i32 = 0;
+
+    let lines: Vec<Vec<char>> = reader
+        .lines()
+        .enumerate()
+        .map(|(row, line)| {
+            let line = line.unwrap();
+            if current_position.is_none() {
+                if let Some((col, character)) = line.chars().enumerate().find(|(_, c)| targets.contains(&c)) {
+                    current_position = Some((row, col));
+                    facing = Some(character);
+                    unique_visited.insert((row, col));
+                }
+            }
+            line.chars().collect()
+        })
+        .collect();
+    if facing.unwrap() == '^' {
+        x_delta = 0;
+        y_delta = -1;
+    } else if facing.unwrap() == '>' {
+        x_delta = 1;
+        y_delta = 0;
+    } else if facing.unwrap() == '<' {
+        x_delta = -1;
+        y_delta = 0;
+    } else {
+        x_delta = 0;
+        y_delta = 1;
+    }
+
+    loop {
+        let (current_y, current_x) = current_position.unwrap();
+        if (current_x as i32 + x_delta) < 0 || (current_x as i32 + x_delta) >= lines.get(0).unwrap().len() as i32 || (current_y as i32 + y_delta) < 0 || (current_y as i32 + y_delta) >= lines.len() as i32 {
+            unique_visited.insert((current_y, current_x));
+            break;
+        }
+        if let Some(row) = lines.get((current_y as i32 + y_delta) as usize) {
+            if let Some(&cell) = row.get((current_x as i32 + x_delta) as usize) {
+                if cell == '#' {
+                    if x_delta == 1 {
+                        x_delta = 0;
+                        y_delta = 1;
+                    } else if x_delta == -1 {
+                        x_delta = 0;
+                        y_delta = -1;
+                    } else if y_delta == 1 {
+                        x_delta = -1;
+                        y_delta = 0;
+                    } else {
+                        x_delta = 1;
+                        y_delta = 0;
+                    }
+                } else {
+                    unique_visited.insert((current_y, current_x));
+                    current_position = Some(((current_y as i32 + y_delta) as usize, (current_x as i32 + x_delta) as usize))
+                }
+            }
+        }
+    }
+    // println!("{:?}", unique_visited);
+    println!("{:?}", unique_visited.len());
+
+}
+
+fn test_obstruction_causes_loop(mut lines: Vec<Vec<char>>, starting_vector: (usize, usize, (i32, i32))) -> bool {
+    let mut current_vector = starting_vector.clone();
+    let mut unique_visited: HashSet<(usize, usize, (i32, i32))> = HashSet::new();
+    unique_visited.insert(current_vector);
+    
+    loop {
+        let (current_y, current_x, (y_delta, x_delta)) = current_vector;
+        if (current_x as i32 + x_delta) < 0 || (current_x as i32 + x_delta) >= lines.get(0).unwrap().len() as i32 || (current_y as i32 + y_delta) < 0 || (current_y as i32 + y_delta) >= lines.len() as i32 {
+            return false;
+        }
+        if let Some(row) = lines.get((current_y as i32 + y_delta) as usize) {
+            if let Some(&cell) = row.get((current_x as i32 + x_delta) as usize) {
+                if cell == '#' {
+                    if x_delta == 1 {
+                        current_vector = (current_y, current_x, (1, 0));
+                    } else if x_delta == -1 {
+                        current_vector = (current_y, current_x, (-1, 0));
+                    } else if y_delta == 1 {
+                        current_vector = (current_y, current_x, (0, -1));
+                    } else {
+                        current_vector = (current_y, current_x, (0, 1));
+                    }
+                } else {
+                    // lines[current_y][current_x] = 'X';
+                    current_vector = ((current_y as i32 + y_delta) as usize, (current_x as i32 + x_delta) as usize, (y_delta, x_delta));
+                }
+                if !unique_visited.insert(current_vector) {
+                    // println!("{:?}", lines);
+                    // let mut file = File::create("output.txt").unwrap();
+                    // for line in lines {
+                    //     writeln!(file, "{}", line.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(" ")).ok();
+                    // }
+                    // println!("{:?}", unique_visited);
+                    // println!("{:?}", current_vector);
+                    return true;
+                }
+            }
+        }
+    }
+}
+
+fn day_six_star_two() {
+    let file = File::open("day6.txt").ok().unwrap();
+    let reader = BufReader::new(file);
+    let targets = ['^', '>', '<', 'V', 'v'];
+    let mut current_vector = None;
+    let mut facing = None;
+    let mut unique_visited: HashSet<(usize, usize, (i32, i32))> = HashSet::new();
+    // let mut total_valid_obstructions = 0;
+    let mut placed_obstructions: HashSet<(usize, usize)> = HashSet::new();
+    let mut start_vector = None;
+
+    let mut lines: Vec<Vec<char>> = reader
+        .lines()
+        .enumerate()
+        .map(|(row, line)| {
+            let line = line.unwrap();
+            if current_vector.is_none() {
+                if let Some((col, character)) = line.chars().enumerate().find(|(_, c)| targets.contains(&c)) {
+                    let mut x_delta: i32 = 0;
+                    let mut y_delta: i32 = 0;
+                    facing = Some(character);
+                    if facing.unwrap() == '^' {
+                        x_delta = 0;
+                        y_delta = -1;
+                    } else if facing.unwrap() == '>' {
+                        x_delta = 1;
+                        y_delta = 0;
+                    } else if facing.unwrap() == '<' {
+                        x_delta = -1;
+                        y_delta = 0;
+                    } else {
+                        x_delta = 0;
+                        y_delta = 1;
+                    }
+                    start_vector = Some((row, col, (y_delta, x_delta)));
+                    current_vector = start_vector;
+
+                    unique_visited.insert(current_vector.unwrap());
+                }
+            }
+            line.chars().collect()
+        })
+        .collect();
+
+    loop {
+        let (current_y, current_x, (y_delta, x_delta)) = current_vector.unwrap();
+        if (current_x as i32 + x_delta) < 0 || (current_x as i32 + x_delta) >= lines.get(0).unwrap().len() as i32 || (current_y as i32 + y_delta) < 0 || (current_y as i32 + y_delta) >= lines.len() as i32 {
+            break;
+        }
+        if let Some(row) = lines.get((current_y as i32 + y_delta) as usize) {
+            if let Some(&cell) = row.get((current_x as i32 + x_delta) as usize) {
+                if cell == '#' {
+                    if x_delta == 1 {
+                        current_vector = Some((current_y, current_x, (1, 0)));
+                    } else if x_delta == -1 {
+                        current_vector = Some((current_y, current_x, (-1, 0)));
+                    } else if y_delta == 1 {
+                        current_vector = Some((current_y, current_x, (0, -1)));
+                    } else {
+                        current_vector = Some((current_y, current_x, (0, 1)));
+                    }
+                } else {
+                    let mut lines_with_new_obstruction = lines.clone();
+                    let next_position_y = (current_y as i32 + y_delta) as usize;
+                    let next_position_x = (current_x as i32 + x_delta) as usize;
+
+                    lines_with_new_obstruction[next_position_y][next_position_x] = '#';
+
+                    if placed_obstructions.get(&(next_position_y, next_position_x)).is_none() && test_obstruction_causes_loop(lines_with_new_obstruction, start_vector.unwrap()) {
+                        placed_obstructions.insert((next_position_y, next_position_x));
+                    }
+                    current_vector = Some((next_position_y, next_position_x, (y_delta, x_delta)))
+                }
+                unique_visited.insert(current_vector.unwrap());
+            }
+        }
+    }
+    println!("{:?}", placed_obstructions.len());
 
 }
 
